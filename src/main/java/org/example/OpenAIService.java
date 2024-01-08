@@ -9,12 +9,27 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 public class OpenAIService {
     private OkHttpClient client;
     private MediaType mediaType;
+
+    private final int MAX_CACHE_SIZE = 50;
+    private final Lock cacheLock = new ReentrantLock();
+
+    private final Map<String, String> codeCache = new LinkedHashMap<>() {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+            return size() > MAX_CACHE_SIZE;
+        }
+    };
+
     private String apiKey;
 
     @Value("${openai.api.key}")
@@ -33,11 +48,19 @@ public class OpenAIService {
     }
 
     public String getGeneratedCode(String userPrompt) {
+        cacheLock.lock();
         try {
+            if (codeCache.containsKey(userPrompt)) {
+                return codeCache.get(userPrompt);
+            }
             String response = makeAPICall(userPrompt);
-            return extractAndAdjustJavaCode(response);
+            String javaCode = extractAndAdjustJavaCode(response);
+            codeCache.put(userPrompt, javaCode);
+            return javaCode;
         } catch (IOException e) {
             throw new RuntimeException("Error while calling OpenAI API", e);
+        } finally {
+            cacheLock.unlock();
         }
     }
 
@@ -107,8 +130,8 @@ public class OpenAIService {
         JSONObject jsonCodeObj = new JSONObject(jsonPart);
         String javaCode = jsonCodeObj.getString("java_code");
 
-        javaCode = javaCode.replace("\\n", "\n");  // Convert escaped newlines to actual newlines
-        javaCode = javaCode.replace("\\\"", "\""); // Correct escaped quotes
+        javaCode = javaCode.replace("\\n", "\n");
+        javaCode = javaCode.replace("\\\"", "\"");
 
         javaCode = javaCode.replace("your_database", "adoptpethd");
         javaCode = javaCode.replace("your_username", "postgres");
