@@ -20,10 +20,10 @@ public class OpenAIService {
     private OkHttpClient client;
     private MediaType mediaType;
 
-    private final int MAX_CACHE_SIZE = 50;
-    private final Lock cacheLock = new ReentrantLock();
+    private static final int MAX_CACHE_SIZE = 50;
+    private static final Lock cacheLock = new ReentrantLock();
 
-    private final Map<String, String> codeCache = new LinkedHashMap<>() {
+    private static final Map<String, String> codeCache = new LinkedHashMap<>() {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
             return size() > MAX_CACHE_SIZE;
